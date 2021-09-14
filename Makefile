@@ -2,6 +2,9 @@ include hack/make-project-vars.mk
 include hack/make-tools.mk
 include hack/make-bundle-vars.mk
 
+REGISTRY_NAMESPACE := jarrpa
+OCS_BUNDLE_IMG := quay.io/jarrpa/ocs-operator-bundle:latest
+export KUBECONFIG := /home/jrivera/ocp/jarrpa-dev/aws-dev/auth/kubeconfig
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # This is a requirement for 'setup-envtest.sh' in the test target.
