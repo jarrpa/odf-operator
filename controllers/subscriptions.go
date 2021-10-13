@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -130,6 +131,11 @@ func (r *StorageSystemReconciler) isVendorCsvReady(instance *odfv1alpha1.Storage
 			return err
 		}
 
+		err = setControllerReferenceOnCSV(csvObj, r.Client, r.Scheme, logger)
+		if err != nil {
+			return err
+		}
+
 		if csvObj.Status.Phase == operatorv1alpha1.CSVPhaseSucceeded &&
 			csvObj.Status.Reason == operatorv1alpha1.CSVReasonInstallSuccessful {
 
@@ -141,6 +147,29 @@ func (r *StorageSystemReconciler) isVendorCsvReady(instance *odfv1alpha1.Storage
 			SetVendorCsvReadyCondition(&instance.Status.Conditions, corev1.ConditionFalse, "NotReady", err.Error())
 			return err
 		}
+
+	}
+
+	return nil
+}
+
+func setControllerReferenceOnCSV(
+	csvObj *operatorv1alpha1.ClusterServiceVersion, cli client.Client,
+	scheme *runtime.Scheme, logger logr.Logger) error {
+
+	odfSub, err := GetOdfSubscription(cli, logger)
+	if err != nil {
+		return err
+	}
+
+	err = controllerutil.SetControllerReference(odfSub, csvObj, scheme)
+	if err != nil {
+		return err
+	}
+
+	err = cli.Update(context.TODO(), csvObj)
+	if err != nil {
+		return err
 	}
 
 	return nil
