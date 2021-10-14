@@ -81,6 +81,10 @@ var (
 	OdfSubscriptionObjectMeta *metav1.ObjectMeta
 )
 
+var (
+	StorageClusterCrdName = "storageclusters.ocs.openshift.io"
+)
+
 func GetEnvOrDefault(env string) string {
 	if val := os.Getenv(env); val != "" {
 		return val

@@ -19,14 +19,18 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -128,8 +132,49 @@ func filterStorageSystem(storageSystemList *odfv1alpha1.StorageSystemList, stora
 	return nil
 }
 
+func (r *StorageClusterReconciler) waitForStorageClusterCRD() error {
+	// At this point, r.Client (from the manager) is using a cache that is not
+	// initialized, so we create a temporary client that skips the cache for
+	// StorageCluster.
+
+	tmpClient, cliErr := cluster.NewClientBuilder().
+		WithUncached(&apiextensionsv1.CustomResourceDefinition{}).
+		Build(nil, ctrl.GetConfigOrDie(), client.Options{
+			Scheme: r.Client.Scheme(),
+			Mapper: r.Client.RESTMapper(),
+		})
+	if cliErr != nil {
+		return cliErr
+	}
+
+	mgrClient := r.Client
+	r.Client = tmpClient
+	defer func() { r.Client = mgrClient }()
+
+	logger := ctrl.Log.WithName("controllers").WithName("StorageCluster").WithName("SetupWithManager")
+
+	scCrd := &apiextensionsv1.CustomResourceDefinition{}
+
+	for {
+		err := r.Client.Get(context.TODO(), types.NamespacedName{Name: StorageClusterCrdName}, scCrd)
+		if err != nil {
+			logger.Error(err, "StorageCluster CRD not found, will retry after 5 seconds")
+			time.Sleep(5 * time.Second)
+		} else {
+			break
+		}
+
+	}
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *StorageClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	err := r.waitForStorageClusterCRD()
+	if err != nil {
+		return err
+	}
 
 	predicateFunc := func(obj runtime.Object) bool {
 		instance, ok := obj.(*ocsv1.StorageCluster)
