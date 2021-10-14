@@ -105,7 +105,7 @@ func (r *StorageSystemReconciler) ensureSubscription(instance *odfv1alpha1.Stora
 	return nil
 }
 
-func (r *StorageSystemReconciler) isVendorCsvReady(instance *odfv1alpha1.StorageSystem, logger logr.Logger) error {
+func (r *StorageSystemReconciler) isVendorCsvReady(instance *odfv1alpha1.StorageSystem, logger logr.Logger, checkCsvStatus bool) error {
 
 	var csvNames []string
 
@@ -134,6 +134,11 @@ func (r *StorageSystemReconciler) isVendorCsvReady(instance *odfv1alpha1.Storage
 		err = setControllerReferenceOnCSV(csvObj, r.Client, r.Scheme, logger)
 		if err != nil {
 			return err
+		}
+
+		// required for cases where we just want to setControllerReferenceOnCSV
+		if !checkCsvStatus {
+			continue
 		}
 
 		if csvObj.Status.Phase == operatorv1alpha1.CSVPhaseSucceeded &&

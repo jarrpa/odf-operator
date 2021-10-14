@@ -161,7 +161,7 @@ func (r *StorageSystemReconciler) reconcile(instance *odfv1alpha1.StorageSystem,
 		return ctrl.Result{}, err
 	}
 
-	err = r.isVendorCsvReady(instance, logger)
+	err = r.isVendorCsvReady(instance, logger, true)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

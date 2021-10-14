@@ -79,14 +79,25 @@ func (r *SubscriptionReconciler) ensureSubscriptions(logger logr.Logger) error {
 	}
 
 	storageSystemInstance := &odfv1alpha1.StorageSystem{
-		ObjectMeta: metav1.ObjectMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ocs-storagecluster-storagesystem",
+			Namespace: OperatorNamespace,
+		},
 		Spec: odfv1alpha1.StorageSystemSpec{
-			Kind: StorageClusterKind,
+			Name:      "ocs-storagecluster",
+			Namespace: OperatorNamespace,
+			Kind:      StorageClusterKind,
 		},
 	}
 
 	// create ocs subscriptions
 	err := storageSystemReconciler.ensureSubscription(storageSystemInstance, logger)
+	if err != nil {
+		return err
+	}
+
+	// set controller reference on the CSV
+	err = storageSystemReconciler.isVendorCsvReady(storageSystemInstance, logger, false)
 	if err != nil {
 		return err
 	}
@@ -104,6 +115,10 @@ func (r *SubscriptionReconciler) ensureSubscriptions(logger logr.Logger) error {
 			if err != nil {
 				return err
 			}
+			err = storageSystemReconciler.isVendorCsvReady(&storageSystemList.Items[i], logger, false)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -118,7 +133,7 @@ func (r *SubscriptionReconciler) createSubscriptionsOnStartUp() error {
 	// Subscriptions.
 
 	tmpClient, cliErr := cluster.NewClientBuilder().
-		WithUncached(&operatorv1alpha1.Subscription{}, &odfv1alpha1.StorageSystem{}).
+		WithUncached(&operatorv1alpha1.Subscription{}, &operatorv1alpha1.ClusterServiceVersion{}, &odfv1alpha1.StorageSystem{}).
 		Build(nil, ctrl.GetConfigOrDie(), client.Options{
 			Scheme: r.Client.Scheme(),
 			Mapper: r.Client.RESTMapper(),
@@ -138,7 +153,7 @@ func (r *SubscriptionReconciler) createSubscriptionsOnStartUp() error {
 		if err == nil {
 			break
 		} else {
-			logger.Error(err, "failed to create OCS subscriptions, will retry after 5 seconds")
+			logger.Error(err, "failed to ensure OCS subscriptions or CSV, will retry after 5 seconds")
 			time.Sleep(5 * time.Second)
 		}
 	}
@@ -196,6 +211,8 @@ func (r *SubscriptionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&operatorv1alpha1.Subscription{},
 			builder.WithPredicates(generationChangedPredicate, subscriptionPredicate)).
 		Owns(&operatorv1alpha1.Subscription{},
+			builder.WithPredicates(generationChangedPredicate, ignoreCreatePredicate)).
+		Owns(&operatorv1alpha1.ClusterServiceVersion{},
 			builder.WithPredicates(generationChangedPredicate, ignoreCreatePredicate)).
 		Complete(r)
 }
