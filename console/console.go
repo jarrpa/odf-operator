@@ -18,8 +18,10 @@ package console
 
 import (
 	"context"
+	"strings"
 
 	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
+	"github.com/red-hat-data-services/odf-operator/pkg/util"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +69,7 @@ func GetService(serviceName string, port int, owner metav1.ObjectMeta) apiv1.Ser
 	}
 }
 
-func GetConsolePluginCR(pluginName string, displayName string, consolePort int, serviceName string, owner metav1.ObjectMeta) consolev1alpha1.ConsolePlugin {
+func GetConsolePluginCR(pluginName string, displayName string, consolePort int, serviceName string, basePath string, owner metav1.ObjectMeta) consolev1alpha1.ConsolePlugin {
 	return consolev1alpha1.ConsolePlugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: pluginName,
@@ -86,6 +88,7 @@ func GetConsolePluginCR(pluginName string, displayName string, consolePort int, 
 				Name:      serviceName,
 				Namespace: DEPLOYMENT_NAMESPACE,
 				Port:      int32(consolePort),
+				BasePath:  basePath,
 			},
 		},
 	}
@@ -96,6 +99,15 @@ func GetConsolePluginCR(pluginName string, displayName string, consolePort int, 
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=*
 
 func InitConsole(client client.Client, odfPort int) error {
+	// The base path to where the request are sent
+	basePath := ""
+	clusterVersion, err := util.DetermineOpenShiftVersion(client)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(clusterVersion, "4.10") {
+		basePath = "/compatibility"
+	}
 	deployment := appsv1.Deployment{}
 	if err := client.Get(context.TODO(), types.NamespacedName{
 		Name:      "odf-console",
@@ -109,7 +121,7 @@ func InitConsole(client client.Client, odfPort int) error {
 		return err
 	}
 	// Create core ODF Plugin
-	odfConsolePlugin := GetConsolePluginCR("odf-console", "ODF Plugin", odfPort, odfService.ObjectMeta.Name, deployment.ObjectMeta)
+	odfConsolePlugin := GetConsolePluginCR("odf-console", "ODF Plugin", odfPort, odfService.ObjectMeta.Name, basePath, deployment.ObjectMeta)
 	if err := client.Create(context.TODO(), &odfConsolePlugin); err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
