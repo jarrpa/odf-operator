@@ -32,6 +32,8 @@ import (
 )
 
 const DEPLOYMENT_NAMESPACE = "openshift-storage"
+const MAIN_BASE_PATH = ""
+const COMPATIBILITY_BASE_PATH = "compatibility"
 
 func GetService(serviceName string, port int, owner metav1.ObjectMeta) apiv1.Service {
 	return apiv1.Service{
@@ -100,7 +102,7 @@ func GetConsolePluginCR(pluginName string, displayName string, consolePort int, 
 
 func InitConsole(client client.Client, odfPort int) error {
 	// The base path to where the request are sent
-	basePath := ""
+	basePath := MAIN_BASE_PATH
 	clusterVersion, err := util.DetermineOpenShiftVersion(client)
 	if err != nil {
 		return err

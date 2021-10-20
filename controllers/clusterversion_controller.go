@@ -18,36 +18,46 @@ package controllers
 
 import (
 	"context"
+	"strings"
 
+	configv1 "github.com/openshift/api/config/v1"
+	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/red-hat-data-services/odf-operator/console"
 )
 
 // ClusterVersionReconciler reconciles a ClusterVersion object
 type ClusterVersionReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	ConsolePort int
 }
 
 //+kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions/finalizers,verbs=update
+//+kubebuilder:rbac:groups="apps",resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=*
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ClusterVersion object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *ClusterVersionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
-
-	// your logic here
+	logger := log.FromContext(ctx)
+	instance := configv1.ClusterVersion{}
+	if err := r.Client.Get(context.TODO(), req.NamespacedName, &instance); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := r.ensureConsolePlugin(instance); err != nil {
+		logger.Error(err, "Could not ensure compatibility for ODF consolePlugin")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -55,7 +65,27 @@ func (r *ClusterVersionReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterVersionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		// Uncomment the following line adding a pointer to an instance of the controlled resource as an argument
-		// For().
+		For(&configv1.ClusterVersion{}).
 		Complete(r)
+}
+
+func (r *ClusterVersionReconciler) ensureConsolePlugin(cv configv1.ClusterVersion) error {
+	consolePlugin := &consolev1alpha1.ConsolePlugin{}
+	if err := r.Client.Get(context.TODO(), types.NamespacedName{
+		Name:      "odf-console",
+		Namespace: console.DEPLOYMENT_NAMESPACE},
+		consolePlugin); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	version := cv.Status.Desired.Version
+	if strings.Contains(version, "4.10") && consolePlugin.Spec.Service.BasePath != console.COMPATIBILITY_BASE_PATH {
+		// If 4.10 is the OCP version then ensure basePath is compatibility
+		patch := client.MergeFrom(consolePlugin.DeepCopy())
+		consolePlugin.Spec.Service.BasePath = console.COMPATIBILITY_BASE_PATH
+		if err := r.Client.Patch(context.TODO(), consolePlugin, patch); err != nil {
+			return err
+		}
+	}
+	return nil
 }
