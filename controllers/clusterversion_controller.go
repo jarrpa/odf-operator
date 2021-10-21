@@ -18,18 +18,19 @@ package controllers
 
 import (
 	"context"
-	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
-	consolev1alpha1 "github.com/openshift/api/console/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/red-hat-data-services/odf-operator/console"
+	"github.com/red-hat-data-services/odf-operator/pkg/util"
 )
 
 // ClusterVersionReconciler reconciles a ClusterVersion object
@@ -54,7 +55,7 @@ func (r *ClusterVersionReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err := r.Client.Get(context.TODO(), req.NamespacedName, &instance); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := r.ensureConsolePlugin(instance); err != nil {
+	if err := r.ensureConsolePlugin(instance.Status.Desired.Version); err != nil {
 		logger.Error(err, "Could not ensure compatibility for ODF consolePlugin")
 		return ctrl.Result{}, err
 	}
@@ -64,28 +65,60 @@ func (r *ClusterVersionReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterVersionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	var err error
+	err = mgr.Add(manager.RunnableFunc(func(context.Context) error {
+		clusterVersion, err := util.DetermineOpenShiftVersion(r.Client)
+		if err != nil {
+			return err
+		}
+
+		return r.ensureConsolePlugin(clusterVersion)
+	}))
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&configv1.ClusterVersion{}).
 		Complete(r)
 }
 
-func (r *ClusterVersionReconciler) ensureConsolePlugin(cv configv1.ClusterVersion) error {
-	consolePlugin := &consolev1alpha1.ConsolePlugin{}
-	if err := r.Client.Get(context.TODO(), types.NamespacedName{
-		Name:      "odf-console",
-		Namespace: console.DEPLOYMENT_NAMESPACE},
-		consolePlugin); err != nil && !errors.IsNotFound(err) {
+func (r *ClusterVersionReconciler) ensureConsolePlugin(clusterVersion string) error {
+	clusterVersion, err := util.DetermineOpenShiftVersion(r.Client)
+	if err != nil {
 		return err
 	}
 
-	version := cv.Status.Desired.Version
-	if strings.Contains(version, "4.10") && consolePlugin.Spec.Service.BasePath != console.COMPATIBILITY_BASE_PATH {
-		// If 4.10 is the OCP version then ensure basePath is compatibility
-		patch := client.MergeFrom(consolePlugin.DeepCopy())
-		consolePlugin.Spec.Service.BasePath = console.COMPATIBILITY_BASE_PATH
-		if err := r.Client.Patch(context.TODO(), consolePlugin, patch); err != nil {
-			return err
-		}
+	// The base path to where the request are sent
+	basePath := console.GetBasePath(clusterVersion)
+
+	// Get ODF console Deployment
+	odfConsoleDeployment := console.GetDeployment(OperatorNamespace)
+	err = r.Client.Get(context.TODO(), types.NamespacedName{
+		Name:      odfConsoleDeployment.Name,
+		Namespace: odfConsoleDeployment.Namespace,
+	}, odfConsoleDeployment)
+	if err != nil {
+		return err
 	}
+
+	// Create/Update ODF console Service
+	odfConsoleService := console.GetService(r.ConsolePort, OperatorNamespace)
+	_, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, odfConsoleService, func() error {
+		return controllerutil.SetControllerReference(odfConsoleDeployment, odfConsoleService, r.Scheme)
+	})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	// Create/Update ODF console ConsolePlugin
+	odfConsolePlugin := console.GetConsolePluginCR(r.ConsolePort, basePath, OperatorNamespace)
+	_, err = controllerutil.CreateOrUpdate(context.TODO(), r.Client, odfConsolePlugin, func() error {
+		return nil
+	})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
 	return nil
 }
