@@ -129,6 +129,8 @@ deploy-with-olm: kustomize ## Deploy controller to the K8s cluster via OLM
 undeploy-with-olm: ## Undeploy controller from the K8s cluster
 	$(KUSTOMIZE) build config/install | kubectl delete -f -
 
+OPERATOR_TYPE ?= standalone
+
 .PHONY: bundle
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
@@ -136,6 +138,7 @@ bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metada
 	cd config/default && $(KUSTOMIZE) edit set image rbac-proxy=$(RBAC_PROXY_IMG)
 	cd config/console && $(KUSTOMIZE) edit set image odf-console=$(ODF_CONSOLE_IMG)
 	cd config/manifests/bases && $(KUSTOMIZE) edit add annotation --force 'olm.skipRange':"$(SKIP_RANGE)" && \
+	        $(KUSTOMIZE) edit add annotation --force 'operators.operatorframework.io/operator-type':"$(OPERATOR_TYPE)" && \
 		$(KUSTOMIZE) edit add patch --name odf-operator.v0.0.0 --kind ClusterServiceVersion\
 		--patch '[{"op": "replace", "path": "/spec/replaces", "value": "$(REPLACES)"}]'
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
