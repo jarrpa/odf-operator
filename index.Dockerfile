@@ -5,6 +5,7 @@ ARG BUNDLE_IMGS=quay.io/ocs-dev/odf-operator-bundle:latest
 RUN opm index add \
 --bundles "${BUNDLE_IMGS}" \
 --out-dockerfile index.Dockerfile \
+--permissive \
 --generate
 
 FROM quay.io/operator-framework/opm:latest
