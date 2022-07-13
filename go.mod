@@ -3,7 +3,7 @@ module github.com/red-hat-storage/odf-operator
 go 1.17
 
 require (
-	github.com/IBM/ibm-storage-odf-operator v1.0.0
+	//github.com/IBM/ibm-storage-odf-operator v1.0.0
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.2.0
 	github.com/onsi/ginkgo/v2 v2.1.3
@@ -21,6 +21,8 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	sigs.k8s.io/controller-runtime v0.11.1
 )
+
+require github.com/IBM/ibm-storage-odf-operator v1.0.1
 
 require (
 	cloud.google.com/go v0.90.0 // indirect

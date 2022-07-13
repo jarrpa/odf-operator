@@ -20,7 +20,7 @@ github.com/Azure/go-autorest/logger
 # github.com/Azure/go-autorest/tracing v0.6.0
 ## explicit; go 1.12
 github.com/Azure/go-autorest/tracing
-# github.com/IBM/ibm-storage-odf-operator v1.0.0
+# github.com/IBM/ibm-storage-odf-operator v1.0.1
 ## explicit; go 1.15
 github.com/IBM/ibm-storage-odf-operator/api/v1alpha1
 # github.com/beorn7/perks v1.0.1
