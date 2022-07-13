@@ -434,40 +434,6 @@ spec:
                 key: node.ocs.openshift.io/storage
                 operator: Equal
                 value: "true"
-      - name: odf-console
-        spec:
-          selector:
-            matchLabels:
-              app: odf-console
-          strategy: {}
-          template:
-            metadata:
-              labels:
-                app: odf-console
-            spec:
-              containers:
-              - image: quay.io/ocs-dev/odf-console:latest
-                name: odf-console
-                ports:
-                - containerPort: 9001
-                  protocol: TCP
-                resources:
-                  limits:
-                    cpu: 100m
-                    memory: 512Mi
-                volumeMounts:
-                - mountPath: /var/serving-cert
-                  name: odf-console-serving-cert
-                  readOnly: true
-              tolerations:
-              - effect: NoSchedule
-                key: node.ocs.openshift.io/storage
-                operator: Equal
-                value: "true"
-              volumes:
-              - name: odf-console-serving-cert
-                secret:
-                  secretName: odf-console-serving-cert
       permissions:
       - rules:
         - apiGroups:
