@@ -25,11 +25,13 @@ jobs:
           # working-directory: somedir
 
           # Optional: golangci-lint command line arguments.
-          # TODO: remove --skip-files once logic is implemented
           # TODO: --out-format=github-action is enforced but doesn't print
           # file names or line numbers. Watch for fix in Issue:
           # https://github.com/golangci/golangci-lint-action/issues/119
-          args: -E gosec --timeout=6m
+          #
+          # The weird NO_FUTURE thing is a workaround suggested here:
+          # https://github.com/golangci/golangci-lint-action/issues/119#issuecomment-981090648
+          args: "--out-${NO_FUTURE}format=colored-line-number -E gosec --timeout=6m"
 
           # Optional: show only new issues if it's a pull request.
           # The default value is `false`.
